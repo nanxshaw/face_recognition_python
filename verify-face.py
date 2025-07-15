@@ -7,22 +7,21 @@ import io
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # CORS untuk semua route
 
-# Konfigurasi logging
+# Logging konfigurasi
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
 )
 
-# Path ke folder gambar user (ubah sesuai struktur project-mu)
+# Folder gambar user (ubah sesuai struktur project-mu)
 BASE_USER_IMAGE_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', 'boldeaccess-backend', 'assets', 'users')
 )
 
-# Toleransi threshold face-recognition
+# Toleransi face distance
 TOLERANCE = 0.65
-
 
 @app.route("/")
 def health_check():
@@ -32,14 +31,16 @@ def health_check():
 @app.route("/verify-face", methods=["POST"])
 def verify_face():
     filename = request.form.get("user_image_name")
-    if 'image' not in request.files or not filename:
-        logging.error("Gambar atau nama file tidak ditemukan dalam request")
-        return jsonify({"match": False, "message": "Gambar atau nama file tidak ditemukan"}), 400
+    uploaded_file = request.files.get("image")
 
-    uploaded_file = request.files['image']
-    logging.info(f"Request verifikasi wajah untuk: {filename}")
+    if not uploaded_file or not filename:
+        logging.warning("Permintaan tidak valid: gambar atau nama file kosong")
+        return jsonify({
+            "match": False,
+            "message": "Gambar dan nama file wajib dikirim"
+        }), 400
 
-    # Konversi gambar upload ke JPEG di memory (menghindari crash dari PNG / RGBA)
+    # Baca gambar yang diupload
     try:
         img = Image.open(uploaded_file)
         if img.mode in ("RGBA", "P"):
@@ -48,18 +49,17 @@ def verify_face():
         img.save(buffer, format="JPEG")
         buffer.seek(0)
         uploaded_image = face_recognition.load_image_file(buffer)
-        logging.info("Gambar absensi berhasil dibaca")
     except Exception as e:
-        logging.error(f"Gagal membaca gambar absensi: {e}")
-        return jsonify({"match": False, "message": f"Gagal membaca gambar absensi: {str(e)}"}), 500
+        logging.error(f"Gagal membaca gambar yang diupload: {e}")
+        return jsonify({"match": False, "message": f"Gagal membaca gambar upload: {str(e)}"}), 500
 
+    # Path gambar user
     known_face_path = os.path.join(BASE_USER_IMAGE_DIR, filename)
-    logging.info(f"Mencari gambar wajah user di: {known_face_path}")
-
     if not os.path.exists(known_face_path):
-        logging.error("Gambar wajah user tidak ditemukan")
-        return jsonify({"match": False, "message": "Gambar wajah user tidak ditemukan"}), 404
+        logging.error(f"Gambar user tidak ditemukan: {filename}")
+        return jsonify({"match": False, "message": "Gambar user tidak ditemukan"}), 404
 
+    # Baca gambar user
     try:
         known_img = Image.open(known_face_path)
         if known_img.mode in ("RGBA", "P"):
@@ -68,7 +68,6 @@ def verify_face():
         known_img.save(buffer_known, format="JPEG")
         buffer_known.seek(0)
         known_image = face_recognition.load_image_file(buffer_known)
-        logging.info("Gambar wajah user berhasil dibaca")
     except Exception as e:
         logging.error(f"Gagal membaca gambar user: {e}")
         return jsonify({"match": False, "message": f"Gagal membaca gambar user: {str(e)}"}), 500
@@ -77,30 +76,30 @@ def verify_face():
         known_encodings = face_recognition.face_encodings(known_image)
         uploaded_encodings = face_recognition.face_encodings(uploaded_image)
 
-        logging.info(f"Wajah terdeteksi → known: {len(known_encodings)} | uploaded: {len(uploaded_encodings)}")
+        logging.info(f"Deteksi wajah → user: {len(known_encodings)}, upload: {len(uploaded_encodings)}")
 
         if not known_encodings:
-            return jsonify({"match": False, "message": "Wajah tidak terdeteksi di gambar database"}), 400
+            return jsonify({"match": False, "message": "Wajah tidak terdeteksi di gambar user"}), 400
         if not uploaded_encodings:
-            return jsonify({"match": False, "message": "Wajah tidak terdeteksi di gambar yang diupload"}), 400
+            return jsonify({"match": False, "message": "Wajah tidak terdeteksi di gambar upload"}), 400
 
-        # Hitung jarak wajah dan bandingkan
         distance = face_recognition.face_distance([known_encodings[0]], uploaded_encodings[0])[0]
-        match_result = distance < TOLERANCE
+        is_match = distance < TOLERANCE
 
-        logging.info(f"Jarak wajah: {distance:.4f} | Toleransi: {TOLERANCE} | Cocok: {match_result}")
+        logging.info(f"Jarak wajah: {distance:.4f} | Toleransi: {TOLERANCE} | Cocok: {is_match}")
 
         return jsonify({
-            "match": bool(match_result),
+            "match": bool(is_match),
             "distance": float(distance),
             "tolerance": TOLERANCE,
-            "message": "Cocok" if match_result else "Tidak cocok"
-        })
+            "message": "Cocok" if is_match else "Tidak cocok"
+        }), 200
 
     except Exception as e:
-        logging.error(f"Error saat face recognition: {e}")
+        logging.exception("Kesalahan saat melakukan verifikasi wajah")
         return jsonify({"match": False, "message": f"Face recognition gagal: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
+    # Jalankan di semua IP agar bisa diakses dari HP via jaringan lokal
     app.run(host="0.0.0.0", port=5000)
