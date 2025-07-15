@@ -21,7 +21,7 @@ BASE_USER_IMAGE_DIR = os.path.abspath(
 )
 
 # Toleransi threshold face-recognition
-TOLERANCE = 0.8
+TOLERANCE = 0.65
 
 
 @app.route("/")
