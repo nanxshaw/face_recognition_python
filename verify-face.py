@@ -21,7 +21,7 @@ BASE_USER_IMAGE_DIR = os.path.abspath(
 )
 
 # Toleransi face distance
-TOLERANCE = 0.5
+TOLERANCE = 0.6
 
 @app.route("/")
 def health_check():
