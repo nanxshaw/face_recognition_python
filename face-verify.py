@@ -20,7 +20,7 @@ BASE_USER_IMAGE_DIR = os.path.abspath(
 )
 
 # Toleransi face distance
-TOLERANCE = 0.6
+TOLERANCE = 0.65
 
 def resize_image(image_array, max_width=800):
     height, width = image_array.shape[:2]
