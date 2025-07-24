@@ -34,10 +34,13 @@ def resize_image(image_array, max_width=800):
 def health_check():
     return "Face Recognition API is running!", 200
 
-@app.route("/verify-face", methods=["POST"])
+@app.route("/face-verify", methods=["POST"])
 def verify_face():
     filename = request.form.get("user_image_name")
     uploaded_file = request.files.get("image")
+    # DEBUG LOGGING
+    logging.info(f"Form data - user_image_name: {filename}")
+    logging.info(f"Form data - uploaded_file: {uploaded_file.filename if uploaded_file else 'None'}")
 
     if not uploaded_file or not filename:
         logging.warning("Permintaan tidak valid: gambar atau nama file kosong")
